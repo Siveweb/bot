@@ -30,7 +30,12 @@ jobs:
 
           INPUT_FILE = "ng_words.txt"
         
-          LANGUAGES = ["en", "zh-CN", "ko"] 
+          LANGUAGES = [
+              "en", "zh-CN", "zh-TW", "ko", "es", "fr", "de", "it", "pt", "ru", 
+              "id", "th", "vi", "uk", "tr", "sv", "pl", "ro", "nl", "fi", 
+              "el", "cs", "da", "hu", "km", "hi", "ne", "ca", "gl", "eu", 
+              "ast", "ga", "an", "ia", "cy", "gd", "eo", "fy"
+          ]
 
           if not os.path.exists(INPUT_FILE):
               print("ng_words.txt が見つかりません。")
