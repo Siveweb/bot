@@ -7,6 +7,7 @@ from janome.tokenizer import Tokenizer
 def load_ng_words():
     ng_list = []
     
+    # ymlの自動翻訳システムがその場に作り出す全言語のファイルをすべて自動で読み込みます
     ng_files = ["ng_words.txt", "ng_words_en.txt", "ng_words_zh.txt", "ng_words_ko.txt"]
     
     for file_name in ng_files:
@@ -23,8 +24,6 @@ def is_safe(text, ng_words):
         return False
 
     clean_text = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', text)
-
-    text_without_mentions = re.sub(r'@[\w\.-]+', '', clean_text)
     
     clean_text = re.sub(r'@[\w\.-]+', '', clean_text).lower()
     
@@ -47,20 +46,19 @@ def is_safe(text, ng_words):
         clean_text = clean_text.replace(leet, normal)
 
     for word in ng_words:
-    
+        if word.isdigit() and len(word) >= 2:
+            if word in stripped_text:
+                return False
+
         if word in stripped_text:
             return False
             
         if word.isalnum() and word.isascii():
             if re.search(r'\b' + re.escape(word) + r'\b', clean_text):
                 return False
-                
         else:
             if word in clean_text:
                 return False
-
-    if re.search(r'[a-zA-Z]', text_without_mentions):
-        return False
             
     return True
 
@@ -70,7 +68,7 @@ def tokenize(text):
 
 def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
     my_handle = os.environ.get('BSKY_HANDLE')
-    print(f"#{tag_name} の最新投稿をチェック中...")
+    print(f"Checking the latest post of #{tag_name}...")
 
     try:
         already_reposted_uris = set()
@@ -85,11 +83,11 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
                 continue
 
             if post.uri in already_reposted_uris:
-                print(f"すでに処理済みの投稿のためスルー: {post.uri}")
+                print(f"Through because it has already been processed: {post.uri}")
                 continue
 
             if post.viewer and getattr(post.viewer, 'like', None):
-                print(f"すでにいいね済みの投稿のためスルー: {post.uri}")
+                print(f"I've already liked it, so I'll pass it.: {post.uri}")
                 continue
 
             text = post.record.text
@@ -99,16 +97,16 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
             try:
                 client.like(post.uri, post.cid)
                 client.repost(post.uri, post.cid)
-                print(f"#{tag_name} をリポスト＆いいねしました！ (@{post.author.handle})")
+                print(f"I reposted and liked#{tag_name}  (@{post.author.handle})！")
                 already_reposted_uris.add(post.uri)
             except Exception as e:
-                print(f"リポスト/いいねエラー: {e}")
+                print(f"Repost/Like error: {e}")
                 pass
     except Exception as e:
-        print(f"ハッシュタグリポストエラー: {e}")
+        print(f"Hashtag repost error: {e}")
         
 def reply_to_comments(client, text_model, ng_words):
-    print("コメントをチェック中...")
+    print("Checking comments...")
     my_handle = os.environ.get('BSKY_HANDLE')
 
     try:
@@ -123,7 +121,7 @@ def reply_to_comments(client, text_model, ng_words):
         for notif in response.notifications:
             if notif.reason == 'reply':
                 if notif.uri in already_replied_uris:
-                    print(f"すでに返信済みのポストのためスルー: {notif.uri}")
+                    print(f"I'll skip it because I'm already replying: {notif.uri}")
                     continue
 
                 if notif.author.handle == my_handle:
@@ -138,19 +136,20 @@ def reply_to_comments(client, text_model, ng_words):
                         if parent_post_res.posts:
                             parent_author = parent_post_res.posts[0].author.handle
                             if parent_author != my_handle:
-                                print(f"ボットの投稿に対するコメ欄ではないためスルー (親の作者: @{parent_author})")
+                                print(f"I'll skip it because it's not a post for bot.(Parent's author: @{parent_author})")
                                 continue
                     except Exception as e:
-                        print(f"親ポストの確認中エラー: {e}")
+                        print(f"Parent post confirmation error: {e}")
                         continue
 
                 author_handle = notif.author.handle
                 comment_text = getattr(notif.record, 'text', '')
 
                 if not is_safe(comment_text, ng_words):
-                    print(f"NGワード検知または英語混入のためコメント返信をスキップ: {comment_text}")
+                    print(f"I will skip the comment: {comment_text}")
                     continue
 
+                # 12歳児らしく文章を短くしてカオスな意味の繋がりを物理的に防ぎます
                 sentence = text_model.make_short_sentence(30, tries=100)
                 if sentence:
                     reply_text = sentence.replace(" ", "")
@@ -161,29 +160,24 @@ def reply_to_comments(client, text_model, ng_words):
                         text=f"@{author_handle} {reply_text}",
                         reply_to={'root': root_ref, 'parent': parent_ref}
                     )
-                    print(f"@{author_handle} のコメ欄にお返事しました: {reply_text}")
+                    print(f"I replied to @{author_handle} comment section: {reply_text}")
                     already_replied_uris.add(notif.uri)
 
         client.app.bsky.notification.update_seen({'seen_at': client.get_current_time_iso()})
     except Exception as e:
-        print(f"コメント返信エラー: {e}")
+        print(f"Reply error: {e}")
 
 def main():
     client = Client()
     client.login(os.environ['BSKY_HANDLE'], os.environ['BSKY_PASSWORD'])
     ng_words = load_ng_words()
-    print(f"読み込んだ多言語NGワード合計数: {len(ng_words)}件")
+    print(f"The number of NG words read is : {len(ng_words)}")
 
-    repost_hashtag_posts(client, "おとなみあーと", ng_words)
+    repost_hashtag_posts(client, "Your original hashtag", ng_words)
     
-    try:
-        feeds = client.app.bsky.unspecced.get_popular_feed_generators()
-        target_feed = next((f.uri for f in feeds.feeds if "Discover" in f.display_name or "Discovery" in f.display_name), None)
-        if not target_feed:
-            target_feed = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/cl-japanese'
-    except Exception as e:
-        print(f"フィード検索失敗: {e}")
-        return
+    # ─── 【仕様変更】全言語の本家Discoverフィードを確実に狙い撃ちで固定します ───
+    target_feed = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
+    print(f"全言語の本家Discoverフィード ({target_feed}) から素材を収集中...")
 
     all_raw_posts = []
     cursor = None
@@ -201,38 +195,44 @@ def main():
             if not cursor: 
                 break
         except Exception as e:
-            print(f"取得エラー: {e}")
+            print(f"Acquisition error: {e}")
             break
 
     cleaned_texts = []
     for item in all_raw_posts:
         if hasattr(item.post.record, 'text'):
             text = item.post.record.text
+            # あなたが作った鉄壁の多言語NGワード・記号偽装フィルターを通過したものだけを対象にする
             if is_safe(text, ng_words) and len(text) >= 2:
-                if re.search(r'[ぁ-んァ-ヶー一-龠]', text):
-                    cleaned_texts.append(tokenize(text))
+                # ─── 【最重要変更】日本語判定のif文を完全に撤廃しました ───
+                # これにより、安全な日常会話であれば、英語や他言語のポストも全て素材として
+                # 綺麗に細切れ（トークナイズ）にしてマルコフ連鎖に登録します！
+                cleaned_texts.append(tokenize(text))
 
-    print(f"最終的に集まった素材数: {len(cleaned_texts)}件")
+    print(f"最終的に集まった全言語の素材数: {len(cleaned_texts)}件")
 
     if len(cleaned_texts) < 2:
         print("素材不足！")
         return
 
+    # マルコフ連鎖モデル作成
     source_data = "\n".join(cleaned_texts)
     text_model = markovify.NewlineText(source_data, state_size=1)
     
+    # 投稿に対するコメ欄の返信チェック
     reply_to_comments(client, text_model, ng_words)
 
+    # 通常ポスト生成の際、生成された文章自体も多言語フィルターにかける
     for _ in range(10): 
-        
+        # 12歳児らしく最大40文字制限にして、大事故の確率を完全に潰します
         sentence = text_model.make_short_sentence(40, tries=100)
         if sentence:
             final_post = sentence.replace(" ", "")
             
-        
+            # 生成された文章が本当に安全か、自作の多言語・偽装フィルターに再投入する
             if is_safe(final_post, ng_words):
                 if "#" not in final_post and "＃" not in final_post:
-                
+                    # 安全が確認された通常ポストを送信する
                     client.send_post(text=final_post)
                     print(f"安全な通常ポストを送信しました: {final_post}")
                     break
