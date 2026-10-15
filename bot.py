@@ -4,52 +4,63 @@ from atproto import Client
 import markovify
 from janome.tokenizer import Tokenizer
 
-# NGワードフィルター（メンション以外の英語をしっかり弾くように修正）
 def load_ng_words():
     ng_list = []
-    if os.path.exists("ng_words.txt"):
-        with open("ng_words.txt", "r", encoding="utf-8") as f:
-            for line in f:
-                word = line.strip()
-                if word and not word.startswith("#"):
-                    ng_list.append(word)
-    return ng_list
+    
+    ng_files = ["ng_words.txt", "ng_words_en.txt", "ng_words_zh.txt", "ng_words_ko.txt"]
+    
+    for file_name in ng_files:
+        if os.path.exists(file_name):
+            with open(file_name, "r", encoding="utf-8") as f:
+                for line in f:
+                    word = line.strip().lower()
+                    if word and not word.startswith("#"):
+                        ng_list.append(word)
+    return list(set(ng_list))
 
 def is_safe(text, ng_words):
     if not text:
         return False
 
-    # URL消し
     clean_text = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', text)
-    
-    # メンションを消したテキストを作る（メンション内の英語は許可する用）
+
     text_without_mentions = re.sub(r'@[\w\.-]+', '', clean_text)
     
-    # 通常チェック用のメンション消し
-    clean_text = re.sub(r'@[\w\.-]+', '', clean_text)
+    clean_text = re.sub(r'@[\w\.-]+', '', clean_text).lower()
     
-    # 1. 「部」で終わる言葉や、文脈としての部活系ワードを弾く
     if re.search(r'部$', text) or '部活' in text:
         return False
 
-    # 2. 災害・地震・警報系ワードを弾く
     disaster_pattern = r'(原爆|空襲|地震|震度|津波|警報|注意報|避難|災害|冠水|停電|余震)'
     if re.search(disaster_pattern, text):
         return False
 
-    # 3. 代表的な都道府県名や「〜市・〜町・〜村」などの地名を弾く
     place_pattern = r'(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄|ヒロシマ|ナガサキ|広島|長崎|沖縄県|[都道府県]|.+[市区町村])'
     if re.search(place_pattern, text):
         return False
 
-    # 4. メンション「以外」の場所に英字（アルファベット）が含まれていたら弾く
+    stripped_text = re.sub(r'[\s\.\-\_\,\/\*]', '', clean_text)
+    
+    leet_map = {"0": "o", "3": "e", "1": "i", "4": "a", "5": "s", "7": "t", "@": "a"}
+    for leet, normal in leet_map.items():
+        stripped_text = stripped_text.replace(leet, normal)
+        clean_text = clean_text.replace(leet, normal)
+
+    for word in ng_words:
+    
+        if word in stripped_text:
+            return False
+            
+        if word.isalnum() and word.isascii():
+            if re.search(r'\b' + re.escape(word) + r'\b', clean_text):
+                return False
+                
+        else:
+            if word in clean_text:
+                return False
+
     if re.search(r'[a-zA-Z]', text_without_mentions):
         return False
-
-    # NGワードチェック
-    for word in ng_words:
-        if word in clean_text:
-            return False
             
     return True
 
@@ -57,7 +68,6 @@ def tokenize(text):
     t = Tokenizer()
     return " ".join([token.surface for token in t.tokenize(text)])
 
-# 検索＆リポスト
 def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
     my_handle = os.environ.get('BSKY_HANDLE')
     print(f"#{tag_name} の最新投稿をチェック中...")
@@ -96,8 +106,7 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
                 pass
     except Exception as e:
         print(f"ハッシュタグリポストエラー: {e}")
-
-# ボットの投稿についたコメ欄の返信機能
+        
 def reply_to_comments(client, text_model, ng_words):
     print("コメントをチェック中...")
     my_handle = os.environ.get('BSKY_HANDLE')
@@ -142,7 +151,7 @@ def reply_to_comments(client, text_model, ng_words):
                     print(f"NGワード検知または英語混入のためコメント返信をスキップ: {comment_text}")
                     continue
 
-                sentence = text_model.make_short_sentence(100, tries=100)
+                sentence = text_model.make_short_sentence(30, tries=100)
                 if sentence:
                     reply_text = sentence.replace(" ", "")
                     parent_ref = {'cid': notif.cid, 'uri': notif.uri}
@@ -163,12 +172,10 @@ def main():
     client = Client()
     client.login(os.environ['BSKY_HANDLE'], os.environ['BSKY_PASSWORD'])
     ng_words = load_ng_words()
-    print(f"読み込んだNGワード数: {len(ng_words)}件")
+    print(f"読み込んだ多言語NGワード合計数: {len(ng_words)}件")
 
-    # ハッシュタグリポスト
     repost_hashtag_posts(client, "おとなみあーと", ng_words)
-
-    # フィードから素材集め
+    
     try:
         feeds = client.app.bsky.unspecced.get_popular_feed_generators()
         target_feed = next((f.uri for f in feeds.feeds if "Discover" in f.display_name or "Discovery" in f.display_name), None)
@@ -211,30 +218,24 @@ def main():
         print("素材不足！")
         return
 
-    # マルコフ連鎖モデル作成
     source_data = "\n".join(cleaned_texts)
     text_model = markovify.NewlineText(source_data, state_size=1)
     
-    # 投稿に対するコメ欄の返信チェック
     reply_to_comments(client, text_model, ng_words)
 
-    # 通常ポスト生成の際、生成された文章自体もNGワードチェックにかける
     for _ in range(10): 
-        sentence = text_model.make_short_sentence(140, tries=100)
+        
+        sentence = text_model.make_short_sentence(40, tries=100)
         if sentence:
             final_post = sentence.replace(" ", "")
             
-            if "#" in final_post or "＃" in final_post:
-                continue
-            if not is_safe(final_post, ng_words):
-                print(f"生成された文にNGワードや英語が含まれていたため破棄: {final_post}")
-                continue
-
-            print(f"投稿します: {final_post}")
-            client.send_post(text=final_post)
-            break
-    else:
-        print("安全な文章が組めなかった、またはすべてNGワードに引っかかりました")
+        
+            if is_safe(final_post, ng_words):
+                if "#" not in final_post and "＃" not in final_post:
+                
+                    client.send_post(text=final_post)
+                    print(f"安全な通常ポストを送信しました: {final_post}")
+                    break
 
 if __name__ == "__main__":
     main()
