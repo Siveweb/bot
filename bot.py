@@ -180,7 +180,7 @@ def main():
         feeds = client.app.bsky.unspecced.get_popular_feed_generators()
         target_feed = next((f.uri for f in feeds.feeds if "Discover" in f.display_name or "Discovery" in f.display_name), None)
         if not target_feed:
-            target_feed = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
+            target_feed = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/cl-japanese'
     except Exception as e:
         print(f"フィード検索失敗: {e}")
         return
