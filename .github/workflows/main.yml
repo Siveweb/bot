@@ -21,7 +21,7 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Auto Translate NG Words
+      - name: Auto Translate NG Words (if needed)
         run: |
           python - << 'EOF'
           import time
@@ -29,13 +29,11 @@ jobs:
           from deep_translator import GoogleTranslator
 
           INPUT_FILE = "ng_words.txt⁠"
-        
-          LANGUAGES = [
-              "en", "zh-CN", "zh-TW", "ko", "es", "fr", "de", "it", "pt", "ru", 
-              "id", "th", "vi", "uk", "tr", "sv", "pl", "ro", "nl", "fi", 
-              "el", "cs", "da", "hu", "km", "hi", "ne", "ca", "gl", "eu", 
-              "ast", "ga", "an", "ia", "cy", "gd", "eo", "fy"
-          ]
+          
+          # すでに英語の翻訳ファイルが存在していれば、毎回の翻訳をスキップする
+          if os.path.exists("ng_words_en.txt"):
+              print("多言語NGワードファイルは既に存在するため、翻訳をスキップします。")
+              exit(0)
 
           if not os.path.exists(INPUT_FILE):
               print(f"Error: {INPUT_FILE} not found in {os.getcwd()}")
@@ -43,6 +41,13 @@ jobs:
 
           with open(INPUT_FILE, "r", encoding="utf-8") as f:
               lines = [line.strip() for line in f if line.strip()]
+
+          LANGUAGES = [
+              "en", "zh-CN", "zh-TW", "ko", "es", "fr", "de", "it", "pt", "ru", 
+              "id", "th", "vi", "uk", "tr", "sv", "pl", "ro", "nl", "fi", 
+              "el", "cs", "da", "hu", "km", "hi", "ne", "ca", "gl", "eu", 
+              "ast", "ga", "an", "ia", "cy", "gd", "eo", "fy"
+          ]
 
           for lang in LANGUAGES:
               file_lang = "zh" if lang == "zh-CN" else lang
@@ -57,12 +62,12 @@ jobs:
                         outfile.write(f"{line.lower()}\n")
                         continue
                       try:
-                          translated_word = translator.translate(line)
-                          if translated_word:
-                              outfile.write(f"{translated_word.strip().lower()}\n")
-                          else:
-                              outfile.write(f"{line.lower()}\n")
-                          time.sleep(0.03)
+                        translated_word = translator.translate(line)
+                        if translated_word:
+                            outfile.write(f"{translated_word.strip().lower()}\n")
+                        else:
+                            outfile.write(f"{line.lower()}\n")
+                        time.sleep(0.03)
                       except Exception as e:
                           outfile.write(f"{line.lower()}\n")
           print("All multilingual translation files generated successfully!")
