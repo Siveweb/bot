@@ -150,12 +150,12 @@ def main():
                             if len(japanese_posts) < 15:
                                 japanese_posts.append(tokenized)
                         elif re.search(r'[a-zA-Z]', text):
-                            if len(text) > 20:
+                            if len(text) > 15:
                                 continue
-                            if len(english_posts) < 15:
+                            if len(english_posts) < 10:
                                 english_posts.append(tokenized)
                         else:
-                            if len(other_posts) < 15:
+                            if len(other_posts) < 10:
                                 other_posts.append(tokenized)
             cursor = getattr(response, 'cursor', None)
             if not cursor:
