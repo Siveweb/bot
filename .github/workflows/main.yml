@@ -28,7 +28,7 @@ jobs:
           import os
           from deep_translator import GoogleTranslator
 
-          INPUT_FILE = "ng_words.txt⁠⁠"
+          INPUT_FILE = "ng_words.txt⁠"
           
           # すでに英語の翻訳ファイルが存在していれば、毎回の翻訳をスキップする
           if os.path.exists("ng_words_en.txt"):
