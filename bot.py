@@ -65,7 +65,8 @@ def format_multilingual_spaces(sentence):
     return re.sub(r'(?<=[ぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠a-zA-Z])|(?<=[a-zA-Zぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠])', '', clean_space_text)
 
 def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
-    my_handle = os.environ.get('BSKY_HANDLE')
+    
+    my_handle = os.environ.get('BSKY_HANDLE') or client.me.handle
     print(f"Checking the latest post of #{tag_name}...")
     try:
         already_reposted_uris = set()
@@ -82,18 +83,19 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
             if not is_safe(post.record.text, ng_words):
                 continue
             try:
-                client.like(post.uri, post.cid)
-                client.repost(post.uri, post.cid)
+            
+                client.like(uri=post.uri, cid=post.cid)
+                client.repost(uri=post.uri, cid=post.cid)
                 print(f"Reposted and liked #{tag_name} (@{post.author.handle})!")
                 already_reposted_uris.add(post.uri)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Failed to repost/like: {e}")
     except Exception as e:
         print(f"Hashtag error: {e}")
 
 def reply_to_comments(client, text_model, ng_words):
     print("Checking comments...")
-    my_handle = os.environ.get('BSKY_HANDLE')
+    my_handle = os.environ.get('BSKY_HANDLE') or client.me.handle
     try:
         already_replied_uris = set()
         feed_res = client.app.bsky.feed.get_author_feed({'actor': my_handle, 'limit': 30})
@@ -123,8 +125,11 @@ def reply_to_comments(client, text_model, ng_words):
         print(f"Reply error: {e}")
 
 def main():
+    BSKY_HANDLE = os.environ.get('BSKY_HANDLE')
+    BSKY_PASSWORD = os.environ.get('BSKY_PASSWORD')
+
     client = Client()
-    client.login(os.environ['BSKY_HANDLE'], os.environ['BSKY_PASSWORD'])
+    client.login(BSKY_HANDLE, BSKY_PASSWORD)
     client._request.headers['Accept-Language'] = 'en,ja,zh,ko,es,fr'
     ng_words = load_ng_words()
     
@@ -166,6 +171,7 @@ def main():
     cleaned_texts = japanese_posts + english_posts + other_posts
     print(f"Collected - JP: {len(japanese_posts)}, EN: {len(english_posts)}, Others: {len(other_posts)}")
     if len(cleaned_texts) < 2:
+        print("Not enough sentences to generate Markov model.")
         return
 
     source_data = "\n".join(cleaned_texts)
