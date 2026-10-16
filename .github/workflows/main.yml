@@ -2,7 +2,7 @@ name: tweet
 
 on:
   schedule:
-    
+    # 毎時20分に自動で起動します
     - cron: '20 * * * *'
   workflow_dispatch:
 
@@ -24,7 +24,6 @@ jobs:
 
       - name: Run bot
         env:
-          
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
         run: python bot.py
