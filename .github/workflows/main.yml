@@ -28,7 +28,7 @@ jobs:
           import os
           from deep_translator import GoogleTranslator
 
-          INPUT_FILE = "ng_words.txt"
+          INPUT_FILE = "ng_words.txt⁠"
         
           LANGUAGES = [
               "en", "zh-CN", "zh-TW", "ko", "es", "fr", "de", "it", "pt", "ru", 
