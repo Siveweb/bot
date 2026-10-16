@@ -18,7 +18,7 @@ def save_processed_uri(uri):
 
 def load_ng_words():
     ng_list = []
-    file_name = "ng_words.txt"
+    file_name = "ng_words.txt⁠"
     if os.path.exists(file_name):
         with open(file_name, "r", encoding="utf-8") as f:
             for line in f:
