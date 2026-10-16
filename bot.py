@@ -65,7 +65,6 @@ def format_multilingual_spaces(sentence):
     return re.sub(r'(?<=[ぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠a-zA-Z])|(?<=[a-zA-Zぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠])', '', clean_space_text)
 
 def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
-    
     my_handle = os.environ.get('BSKY_HANDLE') or client.me.handle
     print(f"Checking the latest post of #{tag_name}...")
     try:
@@ -83,7 +82,6 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
             if not is_safe(post.record.text, ng_words):
                 continue
             try:
-            
                 client.like(uri=post.uri, cid=post.cid)
                 client.repost(uri=post.uri, cid=post.cid)
                 print(f"Reposted and liked #{tag_name} (@{post.author.handle})!")
@@ -125,12 +123,13 @@ def reply_to_comments(client, text_model, ng_words):
         print(f"Reply error: {e}")
 
 def main():
-    BSKY_HANDLE = os.environ.get('BSKY_HANDLE')
-    BSKY_PASSWORD = os.environ.get('BSKY_PASSWORD')
+    BSKY_HANDLE = os.environ.get('BSKY_HANDLE', 'あなたのアカウント名.bsky.social')
+    BSKY_PASSWORD = os.environ.get('BSKY_PASSWORD', 'あなたのアプリパスワード')
 
     client = Client()
     client.login(BSKY_HANDLE, BSKY_PASSWORD)
-    client._request.headers['Accept-Language'] = 'en,ja,zh,ko,es,fr'
+    # エラーの原因だった client._request.headers の行を削除しました
+    
     ng_words = load_ng_words()
     
     repost_hashtag_posts(client, "おとなみあーと", ng_words)
