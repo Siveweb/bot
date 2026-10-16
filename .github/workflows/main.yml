@@ -21,7 +21,7 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Auto Translate and Append to NG Words (if needed)
+      - name: Auto Translate NG Words (if needed)
         run: |
           python - << 'EOF'
           import time
@@ -29,21 +29,18 @@ jobs:
           from deep_translator import GoogleTranslator
 
           INPUT_FILE = "ng_words.txt⁠"
+          
+          # すでに英語の翻訳ファイルが存在していれば、毎回の翻訳をスキップする
+          if os.path.exists("ng_words_en.txt"):
+              print("多言語NGワードファイルは既に存在するため、翻訳をスキップします。")
+              exit(0)
 
           if not os.path.exists(INPUT_FILE):
               print(f"Error: {INPUT_FILE} not found in {os.getcwd()}")
               exit(0)
 
           with open(INPUT_FILE, "r", encoding="utf-8") as f:
-              content = f.read()
-
-          # すでに翻訳済みのマークや多言語ワードが含まれていれば翻訳をスキップ
-          if "# TRANSLATED" in content:
-              print("すでに翻訳版が追加されているため、翻訳をスキップします。")
-              exit(0)
-
-          print("初回のため、多言語翻訳を実行してファイルに統合します...")
-          lines = [line.strip() for line in content.splitlines() if line.strip()]
+              lines = [line.strip() for line in f if line.strip()]
 
           LANGUAGES = [
               "en", "zh-CN", "zh-TW", "ko", "es", "fr", "de", "it", "pt", "ru", 
@@ -52,28 +49,28 @@ jobs:
               "ast", "ga", "an", "ia", "cy", "gd", "eo", "fy"
           ]
 
-          translated_words = []
           for lang in LANGUAGES:
-              print(f"[Translation] Translating for {lang}...")
+              file_lang = "zh" if lang == "zh-CN" else lang
+              output_file = f"ng_words_{file_lang}.txt"
+              
+              print(f"[Translation] Generating translation file for {lang}...")
               translator = GoogleTranslator(source='ja', target=lang)
-              for line in lines:
-                  if line.startswith("#") or line.isdigit() or len(line) <= 1:
-                      continue
-                  try:
-                      translated_word = translator.translate(line)
-                      if translated_word:
-                          translated_words.append(translated_word.strip().lower())
-                      time.sleep(0.02)
-                  except Exception as e:
-                      pass
-
-          # 元のファイルに翻訳版を追記して上書き保存
-          with open(INPUT_FILE, "a", encoding="utf-8") as f:
-              f.write("\n# TRANSLATED\n")
-              for w in sorted(list(set(translated_words))):
-                  f.write(f"{w}\n")
-
-          print("ng_words.txt⁠ への多言語の統合が完了しました！")
+              
+              with open(output_file, "w", encoding="utf-8") as outfile:
+                  for line in lines:
+                      if line.startswith("#") or line.isdigit() or len(line) <= 1:
+                        outfile.write(f"{line.lower()}\n")
+                        continue
+                      try:
+                        translated_word = translator.translate(line)
+                        if translated_word:
+                            outfile.write(f"{translated_word.strip().lower()}\n")
+                        else:
+                            outfile.write(f"{line.lower()}\n")
+                        time.sleep(0.03)
+                      except Exception as e:
+                          outfile.write(f"{line.lower()}\n")
+          print("All multilingual translation files generated successfully!")
           EOF
 
       - name: Run bot
