@@ -6,10 +6,7 @@ from janome.tokenizer import Tokenizer
 
 def load_ng_words():
     ng_list = []
-    
-    # ymlの自動翻訳システムがその場に作り出す全言語のファイルをすべて自動で読み込みます
     ng_files = ["ng_words.txt", "ng_words_en.txt", "ng_words_zh.txt", "ng_words_ko.txt"]
-    
     for file_name in ng_files:
         if os.path.exists(file_name):
             with open(file_name, "r", encoding="utf-8") as f:
@@ -24,7 +21,6 @@ def is_safe(text, ng_words):
         return False
 
     clean_text = re.sub(r'https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '', text)
-    
     clean_text = re.sub(r'@[\w\.-]+', '', clean_text).lower()
     
     if re.search(r'部$', text) or '部活' in text:
@@ -63,126 +59,39 @@ def is_safe(text, ng_words):
     return True
 
 def tokenize(text):
-    t = Tokenizer()
-    return " ".join([token.surface for token in t.tokenize(text)])
+    # 日本語（ひらがな・カタカナ・漢字）が含まれる場合のみJanomeを使う
+    if re.search(r'[ぁ-んァ-ヶー一-龠]', text):
+        try:
+            t = Tokenizer()
+            return " ".join([token.surface for token in t.tokenize(text)])
+        except Exception:
+            return ""
+    else:
+        # 英語や他言語はスペースで分割する
+        words = text.split()
+        return " ".join(words)
 
-def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
-    my_handle = os.environ.get('BSKY_HANDLE')
-    print(f"Checking the latest post of #{tag_name}...")
-
-    try:
-        already_reposted_uris = set()
-        feed_res = client.app.bsky.feed.get_author_feed({'actor': my_handle, 'limit': 50})
-        for item in feed_res.feed:
-            if item.post.uri:
-                already_reposted_uris.add(item.post.uri)
-
-        search_res = client.app.bsky.feed.search_posts({'q': f"#{tag_name}", 'limit': limit})
-        for post in search_res.posts:
-            if post.author.handle == my_handle:
-                continue
-
-            if post.uri in already_reposted_uris:
-                print(f"Through because it has already been processed: {post.uri}")
-                continue
-
-            if post.viewer and getattr(post.viewer, 'like', None):
-                print(f"I've already liked it, so I'll pass it.: {post.uri}")
-                continue
-
-            text = post.record.text
-            if not is_safe(text, ng_words):
-                continue
-
-            try:
-                client.like(post.uri, post.cid)
-                client.repost(post.uri, post.cid)
-                print(f"I reposted and liked#{tag_name}  (@{post.author.handle})！")
-                already_reposted_uris.add(post.uri)
-            except Exception as e:
-                print(f"Repost/Like error: {e}")
-                pass
-    except Exception as e:
-        print(f"Hashtag repost error: {e}")
-        
-def reply_to_comments(client, text_model, ng_words):
-    print("Checking comments...")
-    my_handle = os.environ.get('BSKY_HANDLE')
-
-    try:
-        already_replied_uris = set()
-        feed_res = client.app.bsky.feed.get_author_feed({'actor': my_handle, 'limit': 30})
-        for item in feed_res.feed:
-            record = item.post.record
-            if hasattr(record, 'reply') and record.reply and hasattr(record.reply, 'parent'):
-                already_replied_uris.add(record.reply.parent.uri)
-
-        response = client.app.bsky.notification.list_notifications({'limit': 15})
-        for notif in response.notifications:
-            if notif.reason == 'reply':
-                if notif.uri in already_replied_uris:
-                    print(f"I'll skip it because I'm already replying: {notif.uri}")
-                    continue
-
-                if notif.author.handle == my_handle:
-                    continue
-
-                record = notif.record
-                if hasattr(record, 'reply') and record.reply:
-                    reply_ref = record.reply
-                    try:
-                        parent_post_uri = reply_ref.parent.uri
-                        parent_post_res = client.app.bsky.feed.get_posts({'uris': [parent_post_uri]})
-                        if parent_post_res.posts:
-                            parent_author = parent_post_res.posts[0].author.handle
-                            if parent_author != my_handle:
-                                print(f"I'll skip it because it's not a post for bot.(Parent's author: @{parent_author})")
-                                continue
-                    except Exception as e:
-                        print(f"Parent post confirmation error: {e}")
-                        continue
-
-                author_handle = notif.author.handle
-                comment_text = getattr(notif.record, 'text', '')
-
-                if not is_safe(comment_text, ng_words):
-                    print(f"I will skip the comment: {comment_text}")
-                    continue
-
-                # 12歳児らしく文章を短くしてカオスな意味の繋がりを物理的に防ぎます
-                sentence = text_model.make_short_sentence(30, tries=100)
-                if sentence:
-                    reply_text = sentence.replace(" ", "")
-                    parent_ref = {'cid': notif.cid, 'uri': notif.uri}
-                    root_ref = notif.record.reply.root if hasattr(notif.record, 'reply') and notif.record.reply else parent_ref
-
-                    client.send_post(
-                        text=f"@{author_handle} {reply_text}",
-                        reply_to={'root': root_ref, 'parent': parent_ref}
-                    )
-                    print(f"I replied to @{author_handle} comment section: {reply_text}")
-                    already_replied_uris.add(notif.uri)
-
-        client.app.bsky.notification.update_seen({'seen_at': client.get_current_time_iso()})
-    except Exception as e:
-        print(f"Reply error: {e}")
+def format_multilingual_spaces(sentence):
+    if not sentence:
+        return ""
+    clean_space_text = re.sub(r'\s+', ' ', sentence).strip()
+    return re.sub(r'(?<=[ぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠a-zA-Z])|(?<=[a-zA-Zぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠])', '', clean_space_text)
 
 def main():
     client = Client()
     client.login(os.environ['BSKY_HANDLE'], os.environ['BSKY_PASSWORD'])
     ng_words = load_ng_words()
-    print(f"The number of NG words read is : {len(ng_words)}")
 
-    repost_hashtag_posts(client, "Your original hashtag", ng_words)
-    
-    # ─── 【仕様変更】全言語の本家Discoverフィードを確実に狙い撃ちで固定します ───
+    # Discoverフィードを取得
     target_feed = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
-    print(f"全言語の本家Discoverフィード ({target_feed}) から素材を収集中...")
-
-    all_raw_posts = []
-    cursor = None
     
-    for i in range(5): 
+    japanese_posts = []
+    english_posts = []
+    other_posts = []
+    
+    cursor = None
+    # 均等に集めるために少し多めに巡回
+    for _ in range(8):
         try:
             params = {'feed': target_feed, 'limit': 50}
             if cursor:
@@ -190,51 +99,51 @@ def main():
             response = client.app.bsky.feed.get_feed(params)
             if not response or not response.feed:
                 break
-            all_raw_posts.extend(response.feed)
+            
+            for item in response.feed:
+                if hasattr(item.post.record, 'text'):
+                    text = item.post.record.text
+                    if is_safe(text, ng_words) and len(text) >= 2:
+                        tokenized = tokenize(text)
+                        
+                        # 言語ごとに分類して、各上限（例: 15件まで）均等にストックする
+                        if re.search(r'[ぁ-んァ-ヶー一-龠]', text):
+                            if len(japanese_posts) < 15:
+                                japanese_posts.append(tokenized)
+                        elif re.search(r'[a-zA-Z]', text):
+                            if len(english_posts) < 15:
+                                english_posts.append(tokenized)
+                        else:
+                            if len(other_posts) < 15:
+                                other_posts.append(tokenized)
+
             cursor = getattr(response, 'cursor', None)
-            if not cursor: 
+            if not cursor:
                 break
         except Exception as e:
-            print(f"Acquisition error: {e}")
+            print(f"Error: {e}")
             break
 
-    cleaned_texts = []
-    for item in all_raw_posts:
-        if hasattr(item.post.record, 'text'):
-            text = item.post.record.text
-            # あなたが作った鉄壁の多言語NGワード・記号偽装フィルターを通過したものだけを対象にする
-            if is_safe(text, ng_words) and len(text) >= 2:
-                # ─── 【最重要変更】日本語判定のif文を完全に撤廃しました ───
-                # これにより、安全な日常会話であれば、英語や他言語のポストも全て素材として
-                # 綺麗に細切れ（トークナイズ）にしてマルコフ連鎖に登録します！
-                cleaned_texts.append(tokenize(text))
-
-    print(f"最終的に集まった全言語の素材数: {len(cleaned_texts)}件")
+    # 各言語からバランスよく集まった素材を合体する
+    cleaned_texts = japanese_posts + english_posts + other_posts
+    print(f"Collected - JP: {len(japanese_posts)}, EN: {len(english_posts)}, Others: {len(other_posts)}")
 
     if len(cleaned_texts) < 2:
-        print("素材不足！")
+        print("Not enough source material!")
         return
 
-    # マルコフ連鎖モデル作成
     source_data = "\n".join(cleaned_texts)
     text_model = markovify.NewlineText(source_data, state_size=1)
-    
-    # 投稿に対するコメ欄の返信チェック
-    reply_to_comments(client, text_model, ng_words)
 
-    # 通常ポスト生成の際、生成された文章自体も多言語フィルターにかける
+    # ポスト生成
     for _ in range(10): 
-        # 12歳児らしく最大40文字制限にして、大事故の確率を完全に潰します
         sentence = text_model.make_short_sentence(40, tries=100)
         if sentence:
-            final_post = sentence.replace(" ", "")
-            
-            # 生成された文章が本当に安全か、自作の多言語・偽装フィルターに再投入する
+            final_post = format_multilingual_spaces(sentence)
             if is_safe(final_post, ng_words):
                 if "#" not in final_post and "＃" not in final_post:
-                    # 安全が確認された通常ポストを送信する
                     client.send_post(text=final_post)
-                    print(f"安全な通常ポストを送信しました: {final_post}")
+                    print(f"Posted: {final_post}")
                     break
 
 if __name__ == "__main__":
