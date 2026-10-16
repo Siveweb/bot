@@ -6,14 +6,17 @@ from janome.tokenizer import Tokenizer
 
 def load_ng_words():
     ng_list = []
-    ng_files = ["ng_words.txt", "ng_words_en.txt", "ng_words_zh.txt", "ng_words_ko.txt"]
-    for file_name in ng_files:
-        if os.path.exists(file_name):
-            with open(file_name, "r", encoding="utf-8") as f:
-                for line in f:
-                    word = line.strip().lower()
-                    if word and not word.startswith("#"):
-                        ng_list.append(word)
+    # ファイルは ng_words.txt 1つに絞る！
+    file_name = "ng_words.txt"
+    
+    if os.path.exists(file_name):
+        with open(file_name, "r", encoding="utf-8") as f:
+            for line in f:
+                word = line.strip().lower()
+                if word and not word.startswith("#"):
+                    ng_list.append(word)
+                    
+    print(f"Loaded {len(ng_list)} NG words.")
     return list(set(ng_list))
 
 def is_safe(text, ng_words):
