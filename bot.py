@@ -7,7 +7,7 @@ from janome.tokenizer import Tokenizer
 def load_ng_words():
     ng_list = []
     # ファイルは ng_words.txt 1つに絞る！
-    file_name = "ng_words.txt"
+    file_name = "ng_words.txt⁠"
     
     if os.path.exists(file_name):
         with open(file_name, "r", encoding="utf-8") as f:
