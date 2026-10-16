@@ -4,9 +4,21 @@ from atproto import Client
 import markovify
 from janome.tokenizer import Tokenizer
 
+HISTORY_FILE = "processed_posts.txt"
+
+def load_processed_uris():
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            return set(line.strip() for line in f if line.strip())
+    return set()
+
+def save_processed_uri(uri):
+    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{uri}\n")
+
 def load_ng_words():
     ng_list = []
-    file_name = "ng_words.txt⁠"
+    file_name = "ng_words.txt"
     if os.path.exists(file_name):
         with open(file_name, "r", encoding="utf-8") as f:
             for line in f:
@@ -64,7 +76,7 @@ def format_multilingual_spaces(sentence):
     clean_space_text = re.sub(r'\s+', ' ', sentence).strip()
     return re.sub(r'(?<=[ぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠a-zA-Z])|(?<=[a-zA-Zぁ-んァ-ヶー一-龠])\s+(?=[ぁ-んァ-ヶー一-龠])', '', clean_space_text)
 
-def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
+def repost_hashtag_posts(client, tag_name, ng_words, processed_uris, limit=10):
     my_handle = os.environ.get('BSKY_HANDLE') or client.me.handle
     print(f"Checking the latest post of #{tag_name}...")
     try:
@@ -73,9 +85,10 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
         for item in feed_res.feed:
             if item.post.uri:
                 already_reposted_uris.add(item.post.uri)
+                
         search_res = client.app.bsky.feed.search_posts({'q': f"#{tag_name}", 'limit': limit})
         for post in search_res.posts:
-            if post.author.handle == my_handle or post.uri in already_reposted_uris:
+            if post.author.handle == my_handle or post.uri in already_reposted_uris or post.uri in processed_uris:
                 continue
             if post.viewer and getattr(post.viewer, 'like', None):
                 continue
@@ -85,13 +98,14 @@ def repost_hashtag_posts(client, tag_name, ng_words, limit=10):
                 client.like(uri=post.uri, cid=post.cid)
                 client.repost(uri=post.uri, cid=post.cid)
                 print(f"Reposted and liked #{tag_name} (@{post.author.handle})!")
+                save_processed_uri(post.uri)
                 already_reposted_uris.add(post.uri)
             except Exception as e:
                 print(f"Failed to repost/like: {e}")
     except Exception as e:
         print(f"Hashtag error: {e}")
 
-def reply_to_comments(client, text_model, ng_words):
+def reply_to_comments(client, text_model, ng_words, processed_uris):
     print("Checking comments...")
     my_handle = os.environ.get('BSKY_HANDLE') or client.me.handle
     try:
@@ -101,9 +115,10 @@ def reply_to_comments(client, text_model, ng_words):
             record = item.post.record
             if hasattr(record, 'reply') and record.reply and hasattr(record.reply, 'parent'):
                 already_replied_uris.add(record.reply.parent.uri)
+                
         response = client.app.bsky.notification.list_notifications({'limit': 15})
         for notif in response.notifications:
-            if notif.reason == 'reply' and notif.uri not in already_replied_uris and notif.author.handle != my_handle:
+            if notif.reason == 'reply' and notif.uri not in already_replied_uris and notif.uri not in processed_uris and notif.author.handle != my_handle:
                 comment_text = getattr(notif.record, 'text', '')
                 if not is_safe(comment_text, ng_words):
                     continue
@@ -117,6 +132,7 @@ def reply_to_comments(client, text_model, ng_words):
                         reply_to={'root': root_ref, 'parent': parent_ref}
                     )
                     print(f"Replied to @{notif.author.handle}: {reply_text}")
+                    save_processed_uri(notif.uri)
                     already_replied_uris.add(notif.uri)
         client.app.bsky.notification.update_seen({'seen_at': client.get_current_time_iso()})
     except Exception as e:
@@ -128,11 +144,11 @@ def main():
 
     client = Client()
     client.login(BSKY_HANDLE, BSKY_PASSWORD)
-    # エラーの原因だった client._request.headers の行を削除しました
     
     ng_words = load_ng_words()
+    processed_uris = load_processed_uris()
     
-    repost_hashtag_posts(client, "おとなみあーと", ng_words)
+    repost_hashtag_posts(client, "おとなみあーと", ng_words, processed_uris)
     
     target_feed = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
     japanese_posts, english_posts, other_posts = [], [], []
@@ -176,7 +192,7 @@ def main():
     source_data = "\n".join(cleaned_texts)
     text_model = markovify.NewlineText(source_data, state_size=1)
     
-    reply_to_comments(client, text_model, ng_words)
+    reply_to_comments(client, text_model, ng_words, processed_uris)
     
     for _ in range(10):
         sentence = text_model.make_short_sentence(40, tries=100)
