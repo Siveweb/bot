@@ -18,7 +18,7 @@ def save_processed_uri(uri):
 
 def load_ng_words():
     ng_list = []
-    file_name = "ng_words.txt⁠"
+    file_name = "ng_words.txt"
     if os.path.exists(file_name):
         with open(file_name, "r", encoding="utf-8") as f:
             for line in f:
@@ -118,7 +118,10 @@ def reply_to_comments(client, text_model, ng_words, processed_uris):
                 
         response = client.app.bsky.notification.list_notifications({'limit': 15})
         for notif in response.notifications:
-            if notif.reason == 'reply' and notif.uri not in already_replied_uris and notif.uri not in processed_uris and notif.author.handle != my_handle:
+            if notif.reason == 'reply' and notif.author.handle != my_handle:
+                target_uri = getattr(notif, 'uri', '')
+                if target_uri in already_replied_uris or target_uri in processed_uris:
+                    continue
                 comment_text = getattr(notif.record, 'text', '')
                 if not is_safe(comment_text, ng_words):
                     continue
@@ -132,8 +135,8 @@ def reply_to_comments(client, text_model, ng_words, processed_uris):
                         reply_to={'root': root_ref, 'parent': parent_ref}
                     )
                     print(f"Replied to @{notif.author.handle}: {reply_text}")
-                    save_processed_uri(notif.uri)
-                    already_replied_uris.add(notif.uri)
+                    save_processed_uri(target_uri)
+                    already_replied_uris.add(target_uri)
         client.app.bsky.notification.update_seen({'seen_at': client.get_current_time_iso()})
     except Exception as e:
         print(f"Reply error: {e}")
